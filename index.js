@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+var nodemailer = require('nodemailer');
+var sgTransport = require('nodemailer-sendgrid-transport');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { verify } = require('jsonwebtoken');
 
@@ -28,6 +30,34 @@ function verifyJwt(req, res, next) {
         next();
     });
 }
+
+const emailSenderptions = {
+    auth: {
+        api_key: process.env.EMAIL_SENDER_KEY
+    }
+}
+const emailClient = nodemailer.createTransport(sgTransport(emailSenderptions));
+
+function sendAppoinmentEmail(booking) {
+    const { patient, patientName, treatment, date, slot } = booking;
+    var email = {
+        from: process.env.EMAIL_SENDER,
+        to: patient,
+        subject: `Your appoinment for ${treatment} is on ${date} at ${slot} is confirmed`,
+        text: `Your appoinment for ${treatment} is on ${date} at ${slot} is confirmed`,
+        html: `<b>Hello ${patientName}</b>`
+    };
+
+    emailClient.sendMail(email, function (err, info) {
+        if (err) {
+            console.log(err);
+        }
+        else {
+            console.log('Message sent: ' + info);
+        }
+    });
+}
+
 async function run() {
     try {
         await client.connect();
@@ -140,6 +170,8 @@ async function run() {
                 return res.send({ success: false, booking: exists })
             }
             const result = await bookingCollection.insertOne(booking);
+            sendAppoinmentEmail(booking);
+            console.log({ message: 'Mail send Success' });
             res.send({ success: true, booking: result });
         });
 
@@ -155,7 +187,7 @@ async function run() {
         app.delete('/doctor/:email', verifyJwt, verifyAdmin, async (req, res) => {
             const email = req.params.email;
             const result = await doctorsCollection.deleteOne({ email: email });
-            req.send(result);
+            res.send(result);
         })
     } finally {
 
